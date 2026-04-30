@@ -29,3 +29,5 @@ app.get('*', (req, res) => {
 app.listen(PORT, () => {
   console.log(`🚀 Ethara Task Manager running on http://localhost:${PORT}`);
 });
+
+module.exports = app;
