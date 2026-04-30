@@ -1,21 +1,107 @@
-const Database = require('better-sqlite3');
+const initSqlJs = require('sql.js');
+const fs = require('fs');
 const path = require('path');
 
-let db;
+// Use /tmp on Vercel (serverless), local data/ folder otherwise
+const isVercel = process.env.VERCEL === '1';
+const DB_PATH = isVercel
+  ? '/tmp/ethara.db'
+  : path.join(__dirname, 'data', 'ethara.db');
 
-function getDB() {
-  if (!db) {
-    db = new Database(path.join(__dirname, 'data', 'ethara.db'));
-    db.pragma('journal_mode = WAL');
-    db.pragma('foreign_keys = ON');
+let dbWrapper = null;
+
+// Wrapper to provide better-sqlite3 compatible API over sql.js
+class DBWrapper {
+  constructor(sqlDb) {
+    this.db = sqlDb;
   }
-  return db;
+
+  prepare(sql) {
+    const self = this;
+    return {
+      get(...params) {
+        let stmt;
+        try {
+          stmt = self.db.prepare(sql);
+          if (params.length) stmt.bind(params);
+          if (stmt.step()) {
+            return stmt.getAsObject();
+          }
+          return undefined;
+        } finally {
+          if (stmt) stmt.free();
+        }
+      },
+      all(...params) {
+        const results = [];
+        let stmt;
+        try {
+          stmt = self.db.prepare(sql);
+          if (params.length) stmt.bind(params);
+          while (stmt.step()) {
+            results.push(stmt.getAsObject());
+          }
+          return results;
+        } finally {
+          if (stmt) stmt.free();
+        }
+      },
+      run(...params) {
+        self.db.run(sql, params);
+        const lastId = self.db.exec("SELECT last_insert_rowid()");
+        return {
+          lastInsertRowid: lastId.length ? lastId[0].values[0][0] : 0,
+          changes: self.db.getRowsModified()
+        };
+      }
+    };
+  }
+
+  exec(sql) {
+    this.db.exec(sql);
+  }
+
+  pragma(str) {
+    try { this.db.exec(`PRAGMA ${str}`); } catch (e) { /* ignore */ }
+  }
+
+  save() {
+    try {
+      const data = this.db.export();
+      const buffer = Buffer.from(data);
+      fs.writeFileSync(DB_PATH, buffer);
+    } catch (e) {
+      console.error('DB save error:', e.message);
+    }
+  }
 }
 
-function initDB() {
-  const database = getDB();
+async function getDB() {
+  if (dbWrapper) return dbWrapper;
 
-  database.exec(`
+  const SQL = await initSqlJs();
+
+  let db;
+  try {
+    if (fs.existsSync(DB_PATH)) {
+      const fileBuffer = fs.readFileSync(DB_PATH);
+      db = new SQL.Database(fileBuffer);
+    } else {
+      db = new SQL.Database();
+    }
+  } catch (e) {
+    db = new SQL.Database();
+  }
+
+  dbWrapper = new DBWrapper(db);
+  dbWrapper.pragma('foreign_keys = ON');
+  return dbWrapper;
+}
+
+async function initDB() {
+  const db = await getDB();
+
+  db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
@@ -66,6 +152,7 @@ function initDB() {
     );
   `);
 
+  db.save();
   console.log('✅ Database initialized');
 }
 

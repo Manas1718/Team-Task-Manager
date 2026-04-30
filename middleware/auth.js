@@ -3,7 +3,7 @@ const { getDB } = require('../database');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'ethara-ai-secret-2024-xk9m2';
 
-function authenticate(req, res, next) {
+async function authenticate(req, res, next) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Authentication required' });
@@ -12,7 +12,7 @@ function authenticate(req, res, next) {
   const token = authHeader.split(' ')[1];
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    const db = getDB();
+    const db = await getDB();
     const user = db.prepare('SELECT id, name, email, role, avatar_color FROM users WHERE id = ?').get(decoded.id);
     if (!user) return res.status(401).json({ error: 'User not found' });
     req.user = user;
@@ -29,8 +29,8 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-function requireProjectAccess(req, res, next) {
-  const db = getDB();
+async function requireProjectAccess(req, res, next) {
+  const db = await getDB();
   const projectId = req.params.projectId || req.params.id;
   const member = db.prepare(
     'SELECT * FROM project_members WHERE project_id = ? AND user_id = ?'
