@@ -1,11 +1,14 @@
 {
   "name": "ethara-task-manager",
   "version": "1.0.0",
-  "description": "Team Task Manager by Ethara AI - Full-stack web app for project and task management with role-based access",
+  "description": "Team Task Manager by Ethara AI - Full-stack React + Express app",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "client:dev": "cd client && npm run dev",
+    "build": "cd client && npm install && npm run build",
+    "postinstall": "cd client && npm install && npm run build"
   },
   "dependencies": {
     "express": "^4.18.2",
